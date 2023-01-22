@@ -1,0 +1,33 @@
+Sub MoveFiles()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Sheets("Sheet1") 'Change to the name of your sheet
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    Dim i As Long
+    Dim filesMoved As Long
+    filesMoved = 0
+    Dim startTime As Double
+    startTime = Timer
+    For i = 2 To lastRow 'Assuming your data starts on Row 2
+        Dim sourcePath As String
+        sourcePath = ws.Cells(i, "A").Value & "\" & ws.Cells(i, "B").Value
+        Dim destinationPath As String
+        destinationPath = ws.Cells(i, "C").Value & "\" & ws.Cells(i, "D").Value
+
+        If Dir(sourcePath) = "" Then
+            ws.Cells(i, "E").Value = "Source file not found"
+        Else
+            If Dir(destinationPath, vbDirectory) = "" Then
+                MkDir destinationPath
+            End If
+            FileCopy sourcePath, destinationPath
+            Kill sourcePath
+            filesMoved = filesMoved + 1
+        End If
+    Next i
+    Dim endTime As Double
+    endTime = Timer
+    Dim totalTime As Double
+    totalTime = endTime - startTime
+    MsgBox filesMoved & " files were moved in " & totalTime & " seconds.", vbInformation, "Files moved"
+End Sub
