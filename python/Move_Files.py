@@ -6,6 +6,9 @@ import time
 excel_file = "file.xlsx"
 sheet_name = "Sheet1"
 
+# error file name
+error_file = "error_file.xlsx"
+
 # read data from excel file
 data = pd.read_excel(excel_file, sheet_name = sheet_name)
 
@@ -43,8 +46,7 @@ endTime = time.time()
 totalTime = endTime - startTime
 
 # write the updated data to the excel file
-# creating a new excel file name
-error_file = "error_file.xlsx"
+
 # write only the rows that have an error message
 data[data["E"] == "Source file not found"].to_excel(error_file, index=False)
 
