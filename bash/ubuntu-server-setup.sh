@@ -28,7 +28,8 @@ echo -e "\n********** User Setup Complete **********\n"
 
 # Set up SSH directory and fetch GitHub SSH keys (overwrite each time to ensure latest keys)
 echo "Setting up SSH keys for $NEW_USER from GitHub..."
-sudo -u $NEW_USER mkdir -p /home/$NEW_USER/.ssh
+mkdir -p /home/$NEW_USER/.ssh
+chown $NEW_USER:$NEW_USER /home/$NEW_USER/.ssh
 sudo -u $NEW_USER wget -qO /home/$NEW_USER/.ssh/authorized_keys https://github.com/$GITHUB_USER.keys || { echo "Failed to fetch SSH keys from GitHub."; exit 1; }
 chmod 700 /home/$NEW_USER/.ssh
 chmod 600 /home/$NEW_USER/.ssh/authorized_keys
@@ -120,7 +121,9 @@ LOG_DIR="/home/$NEW_USER/logs"
 
 # Ensure the scripts and logs directories exist
 mkdir -p "$SCRIPT_DIR"
+chown $NEW_USER:$NEW_USER "$SCRIPT_DIR"
 mkdir -p "$LOG_DIR"
+chown $NEW_USER:$NEW_USER "$LOG_DIR"
 SCRIPT_PATH="$SCRIPT_DIR/download-github-sshkeys.sh"
 wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/download-github-ssh -O "$SCRIPT_PATH" || { echo "Failed to download GitHub SSH key script."; exit 1; }
 chmod +x "$SCRIPT_PATH"
