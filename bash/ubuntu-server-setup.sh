@@ -128,8 +128,7 @@ echo -e "\n********** GitHub SSH Key Script Downloaded and Configured **********
 
 # Update crontab to include SSH key download tasks (failsafe for multiple script runs)
 (crontab -l 2>/dev/null | grep -q "download-github-ssh.sh" ) || {
-    (crontab -l 2>/dev/null; echo "*/10 * * * * sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt") | crontab -
-    (crontab -l 2>/dev/null; echo "@reboot sleep 120 && sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt") | crontab -
+    (crontab -l 2>/dev/null; echo "*/10 * * * * sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt"; echo "@reboot sleep 120 && sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt") | crontab -
     echo "Crontab updated with GitHub SSH key download tasks."
 }
 
