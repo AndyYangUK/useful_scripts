@@ -20,7 +20,7 @@ else
     adduser --disabled-password --gecos "" $NEW_USER
     read -sp "Enter a password for the new user $NEW_USER: " USER_PASSWORD
     echo
-    echo "$NEW_USER:$USER_PASSWORD" | chpasswd  # Replace 'password' with a strong password
+    echo "$NEW_USER:$USER_PASSWORD" | chpasswd
     usermod -aG sudo $NEW_USER
     echo "$NEW_USER created and added to sudo group."
 fi
@@ -114,6 +114,25 @@ else
 fi
 echo -e "\n********** Netdata Installation Complete **********\n"
 
+# Download GitHub SSH key script and add to path
+SCRIPT_DIR="/home/$NEW_USER/scripts"
+LOG_DIR="/home/$NEW_USER/logs"
+
+# Ensure the scripts and logs directories exist
+mkdir -p "$SCRIPT_DIR"
+mkdir -p "$LOG_DIR"
+SCRIPT_PATH="$SCRIPT_DIR/download-github-sshkeys.sh"
+wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/download-github-ssh -O "$SCRIPT_PATH" || { echo "Failed to download GitHub SSH key script."; exit 1; }
+chmod +x "$SCRIPT_PATH"
+echo -e "\n********** GitHub SSH Key Script Downloaded and Configured **********\n"
+
+# Update crontab to include SSH key download tasks (failsafe for multiple script runs)
+(crontab -l 2>/dev/null | grep -q "download-github-ssh.sh" ) || {
+    (crontab -l 2>/dev/null; echo "*/10 * * * * sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt") | crontab -
+    (crontab -l 2>/dev/null; echo "@reboot sleep 120 && sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt") | crontab -
+    echo "Crontab updated with GitHub SSH key download tasks."
+}
+
 # Verification
 echo "Running verification checks..."
 echo -e "\n********** Verification Results **********\n"
@@ -157,4 +176,10 @@ else
     echo "WARNING: Netdata is not running. Please check the installation."
 fi
 
-echo -e "\n********** All Verification Checks Complete **********\n"
+# GitHub SSH key script check
+[[ -f "$SCRIPT_PATH" ]] && [[ -x "$SCRIPT_PATH" ]] && echo "GitHub SSH key script is present at $SCRIPT_PATH and is executable."
+
+# Crontab verification check
+crontab -l | grep -q "download-github-ssh.sh" && echo "Crontab entries for GitHub SSH key download tasks are configured."
+
+echo -e "\n********** All Verification Checks Complete
