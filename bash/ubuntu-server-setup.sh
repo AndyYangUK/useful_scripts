@@ -2,7 +2,7 @@
 
 # This script sets up a new user, configures SSH access, sets up a firewall, installs security tools (Fail2ban and Netdata), enables automatic updates and security patches, and ensures secure system settings are in place. It also verifies the system configuration after setup.
 # Run this command to execute the setup script:
-# wget -qO - https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/ubuntu-server-setup.sh | bash
+# wget -qO - https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/ubuntu-server-setup.sh | sudo bash
 
 
 # Variables
