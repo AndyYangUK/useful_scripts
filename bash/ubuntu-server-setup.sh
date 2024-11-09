@@ -1,10 +1,18 @@
 #!/bin/bash
 
-# This script sets up a new user, configures SSH access, sets up a firewall, installs security tools (Fail2ban and Netdata), enables automatic updates and security patches, and ensures secure system settings are in place. It also verifies the system configuration after setup.
+# To download this script from GitHub and run it with sudo, use the following commands:
+# wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/ubuntu-server-setup.sh -O ubuntu-server-setup.sh && sudo bash ubuntu-server-setup.sh
 
 # Variables
 NEW_USER="andy"
 GITHUB_USER="andyyanguk"  # GitHub username to fetch SSH keys
+
+# Prompt for any required input at the start
+read -p "Enter the Zerotier network ID: " ZEROTIER_NETWORK_ID
+read -sp "Enter a password for the new user $NEW_USER: " USER_PASSWORD
+read -sp "Enter your Netdata claim token: " NETDATA_CLAIM_TOKEN
+echo
+read -p "Enter your Netdata claim room ID: " NETDATA_CLAIM_ROOMS
 
 # Update system
 echo "Updating system..."
@@ -18,33 +26,55 @@ if id -u "$NEW_USER" >/dev/null 2>&1; then
 else
     echo "Creating new user $NEW_USER..."
     adduser --disabled-password --gecos "" $NEW_USER
-    read -sp "Enter a password for the new user $NEW_USER: " USER_PASSWORD
-    echo
     echo "$NEW_USER:$USER_PASSWORD" | chpasswd
     usermod -aG sudo $NEW_USER
     echo "$NEW_USER created and added to sudo group."
 fi
 echo -e "\n********** User Setup Complete **********\n"
 
-# Set up SSH directory and fetch GitHub SSH keys (overwrite each time to ensure latest keys)
-echo "Setting up SSH keys for $NEW_USER from GitHub..."
-mkdir -p /home/$NEW_USER/.ssh
-chown $NEW_USER:$NEW_USER /home/$NEW_USER/.ssh
-sudo -u $NEW_USER wget -qO /home/$NEW_USER/.ssh/authorized_keys https://github.com/$GITHUB_USER.keys || { echo "Failed to fetch SSH keys from GitHub."; exit 1; }
-chmod 700 /home/$NEW_USER/.ssh
-chmod 600 /home/$NEW_USER/.ssh/authorized_keys
-echo "SSH keys added for $NEW_USER."
-echo -e "\n********** SSH Key Setup Complete **********\n"
+# Install Zerotier and join network
+if command -v zerotier-cli &> /dev/null && zerotier-cli info >/dev/null 2>&1; then
+    echo "Zerotier is already installed and active."
+else
+    echo "Installing Zerotier..."
+    curl -s https://install.zerotier.com | sudo bash || { echo "Failed to install Zerotier."; exit 1; }
+    echo "Joining Zerotier network $ZEROTIER_NETWORK_ID..."
+    zerotier-cli join $ZEROTIER_NETWORK_ID || { echo "Failed to join Zerotier network."; exit 1; }
+    while true; do
+        read -p "Have you accepted this server on the Zerotier portal? (y/n): " yn
+        case $yn in
+            [Yy]* ) break;;
+            [Nn]* ) echo "Please accept the server on the Zerotier portal to proceed.";;
+            * ) echo "Please answer yes or no.";;
+        esac
+    done
+fi
+echo -e "\n********** Zerotier Installation and Network Join Complete **********\n"
 
-# Install and configure UFW firewall
-echo "Installing UFW if not available..."
-apt install -y ufw || { echo "Failed to install UFW."; exit 1; }
+# Download GitHub SSH key script and add to path
+SCRIPT_DIR="/home/$NEW_USER/scripts"
+LOG_DIR="/home/$NEW_USER/logs"
 
-echo "Configuring UFW firewall..."
-ufw allow OpenSSH >/dev/null 2>&1
-ufw --force enable
-ufw status
-echo -e "\n********** Firewall Setup Complete **********\n"
+# Ensure the scripts and logs directories exist
+mkdir -p "$SCRIPT_DIR"
+chown $NEW_USER:$NEW_USER "$SCRIPT_DIR"
+mkdir -p "$LOG_DIR"
+chown $NEW_USER:$NEW_USER "$LOG_DIR"
+SCRIPT_PATH="$SCRIPT_DIR/download-github-sshkeys.sh"
+wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/download-github-ssh.sh -O "$SCRIPT_PATH" || { echo "Failed to download GitHub SSH key script."; exit 1; }
+chmod +x "$SCRIPT_PATH"
+echo -e "\n********** GitHub SSH Key Script Downloaded and Configured **********\n"
+
+# Update crontab to include SSH key download tasks 
+(crontab -l 2>/dev/null | grep -q "download-github-sshkeys.sh") || {
+    (crontab -l 2>/dev/null; echo "*/10 * * * * sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt"; echo "@reboot sleep 120 && sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt") | crontab -
+    echo "Crontab updated with GitHub SSH key download tasks."
+}
+
+# Run the GitHub SSH key script
+echo "Running GitHub SSH key script to ensure latest SSH keys are active..."
+sudo -u $NEW_USER sh $SCRIPT_PATH || { echo "Failed to run GitHub SSH key script."; exit 1; }
+echo -e "\n********** GitHub SSH Key Script Run Complete **********\n"
 
 # Set up SSH security (check if already set)
 echo "Configuring SSH..."
@@ -62,14 +92,15 @@ else
     sed -i "s/^#PasswordAuthentication yes/PasswordAuthentication no/" $SSH_CONFIG
 fi
 
-# Restart SSH only if the configuration was modified
-if systemctl is-active --quiet ssh && ! systemctl is-failed ssh; then
-    echo "Restarting SSH..."
-    systemctl restart ssh || { echo "Failed to restart SSH."; exit 1; }
-else
-    echo "SSH service not running or already failed. Please check SSH configuration."
-fi
-echo -e "\n********** SSH Security Setup Complete **********\n"
+# Install and configure UFW firewall
+echo "Installing UFW if not available..."
+apt install -y ufw || { echo "Failed to install UFW."; exit 1; }
+
+echo "Configuring UFW firewall..."
+ufw allow OpenSSH >/dev/null 2>&1
+ufw --force enable
+ufw status
+echo -e "\n********** Firewall Setup Complete **********\n"
 
 # Enable automatic updates if not already enabled
 echo "Checking if automatic updates are enabled..."
@@ -106,34 +137,14 @@ else
 fi
 echo -e "\n********** Root Account Lock Complete **********\n"
 
-# Install Netdata
-if ! command -v netdata &> /dev/null; then
-    echo "Installing Netdata..."
-    wget -O /tmp/netdata-kickstart.sh https://get.netdata.cloud/kickstart.sh && sh /tmp/netdata-kickstart.sh --stable-channel --claim-token NimZ6nldcsDAApy7C3qUyt3Myq1H8a0SVSXw4myCEekl84Rf3VFw843vB26P-HxUd3lQtA-WvQPXC8R9LubPxY9y_255RBBUq--_E1oP1-ua0js10yAZ6aHPte-C70wppf_6FL0 --claim-rooms fdce1ac0-3753-49e1-b5d3-e366dbea1dad --claim-url https://app.netdata.cloud || { echo "Failed to install Netdata."; exit 1; }
+# Restart SSH only if the configuration was modified
+if systemctl is-active --quiet ssh && ! systemctl is-failed ssh; then
+    echo "Restarting SSH..."
+    systemctl restart ssh || { echo "Failed to restart SSH."; exit 1; }
 else
-    echo "Netdata is already installed."
+    echo "SSH service not running or already failed. Please check SSH configuration."
 fi
-echo -e "\n********** Netdata Installation Complete **********\n"
-
-# Download GitHub SSH key script and add to path
-SCRIPT_DIR="/home/$NEW_USER/scripts"
-LOG_DIR="/home/$NEW_USER/logs"
-
-# Ensure the scripts and logs directories exist
-mkdir -p "$SCRIPT_DIR"
-chown $NEW_USER:$NEW_USER "$SCRIPT_DIR"
-mkdir -p "$LOG_DIR"
-chown $NEW_USER:$NEW_USER "$LOG_DIR"
-SCRIPT_PATH="$SCRIPT_DIR/download-github-sshkeys.sh"
-wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/download-github-ssh -O "$SCRIPT_PATH" || { echo "Failed to download GitHub SSH key script."; exit 1; }
-chmod +x "$SCRIPT_PATH"
-echo -e "\n********** GitHub SSH Key Script Downloaded and Configured **********\n"
-
-# Update crontab to include SSH key download tasks (failsafe for multiple script runs)
-(crontab -l 2>/dev/null | grep -q "download-github-ssh.sh" ) || {
-    (crontab -l 2>/dev/null; echo "*/10 * * * * sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt"; echo "@reboot sleep 120 && sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt") | crontab -
-    echo "Crontab updated with GitHub SSH key download tasks."
-}
+echo -e "\n********** SSH Security Setup Complete **********\n"
 
 # Verification
 echo "Running verification checks..."
@@ -182,6 +193,6 @@ fi
 [[ -f "$SCRIPT_PATH" ]] && [[ -x "$SCRIPT_PATH" ]] && echo "GitHub SSH key script is present at $SCRIPT_PATH and is executable."
 
 # Crontab verification check
-crontab -l | grep -q "download-github-ssh.sh" && echo "Crontab entries for GitHub SSH key download tasks are configured."
+crontab -l | grep -q "download-github-sshkeys.sh" && echo "Crontab entries for GitHub SSH key download tasks are configured."
 
 echo -e "\n********** All Verification Checks Complete **********\n"
