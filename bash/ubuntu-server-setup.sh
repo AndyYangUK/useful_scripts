@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# To download this script from GitHub and run it with sudo, use the following commands:
+# To download this script from GitHub and run it:
 # wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/ubuntu-server-setup.sh -O ubuntu-server-setup.sh && sudo bash ubuntu-server-setup.sh
 
 # Variables
@@ -9,7 +9,9 @@ GITHUB_USER="andyyanguk"  # GitHub username to fetch SSH keys
 
 # Prompt for any required input at the start
 read -p "Enter the Zerotier network ID: " ZEROTIER_NETWORK_ID
+echo
 read -sp "Enter a password for the new user $NEW_USER: " USER_PASSWORD
+echo
 read -sp "Enter your Netdata claim token: " NETDATA_CLAIM_TOKEN
 echo
 read -p "Enter your Netdata claim room ID: " NETDATA_CLAIM_ROOMS
