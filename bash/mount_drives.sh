@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/mount_drives.sh -O mount_drives.sh && sudo bash mount_drives.sh
+
 # Prompt user for the drive to mount
 echo "Available drives:"
 lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
