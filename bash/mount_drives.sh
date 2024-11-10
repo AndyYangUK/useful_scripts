@@ -1,56 +1,52 @@
 #!/bin/bash
 
-# Find unmounted drives
-UNMOUNTED_DRIVE=$(lsblk -ln -o NAME,MOUNTPOINT | awk '$2 == "" && $1 != "sda" {print $1}')
+# Prompt user for the drive to mount
+echo "Available drives:"
+lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
+echo
+read -p "Enter the drive you want to mount (e.g., sda or sdb1): " DRIVE
 
-if [ -z "$UNMOUNTED_DRIVE" ]; then
-    echo "No unmounted drives found."
-    exit 1
+# Verify the drive exists
+if [ ! -b "/dev/$DRIVE" ]; then
+  echo "Error: /dev/$DRIVE does not exist."
+  exit 1
 fi
 
-# Determine mount point suffix
-MOUNT_INDEX=0
-while [ -d "/mnt/data$MOUNT_INDEX" ]; do
-    MOUNT_INDEX=$((MOUNT_INDEX + 1))
-done
+# Prompt user for the mount point
+read -p "Enter the mount point (e.g., /mnt/data): " MOUNT_POINT
 
-# Mount the unmounted drive to /mnt/data
-if [ $MOUNT_INDEX -eq 0 ]; then
-    MOUNT_POINT="/mnt/data"
-else
-    MOUNT_POINT="/mnt/data$MOUNT_INDEX"
-fi
-DRIVE="/dev/$UNMOUNTED_DRIVE"
-
-# Create mount point directory if it doesn't exist
+# Create the mount point if it doesn't exist
 if [ ! -d "$MOUNT_POINT" ]; then
-    sudo mkdir -p "$MOUNT_POINT"
+  echo "Creating mount point at $MOUNT_POINT..."
+  sudo mkdir -p "$MOUNT_POINT"
 fi
 
-# Confirm drive before formatting
-lsblk
-read -p "Is $DRIVE the correct drive to mount? (y/n): " CONFIRM
-if [[ "$CONFIRM" != "y" ]]; then
-    echo "Aborting operation."
-    exit 1
-fi
-
-# Format the drive if it is not formatted
-if [ -z "$(blkid $DRIVE)" ]; then
-    echo "Formatting drive $DRIVE with ext4 filesystem..."
-    sudo mkfs.ext4 "$DRIVE"
+# Get filesystem type
+FILESYSTEM=$(sudo blkid -s TYPE -o value /dev/$DRIVE)
+if [ -z "$FILESYSTEM" ]; then
+  echo "Error: Could not determine filesystem type for /dev/$DRIVE."
+  exit 1
 fi
 
 # Mount the drive
-sudo mount "$DRIVE" "$MOUNT_POINT" || { echo "Failed to mount the drive."; exit 1; }
+sudo mount /dev/$DRIVE "$MOUNT_POINT"
+echo "/dev/$DRIVE mounted to $MOUNT_POINT."
 
-# Get UUID of the drive
-UUID=$(blkid -s UUID -o value "$DRIVE")
-
-# Add to /etc/fstab if not already present
-if ! grep -qs "$UUID" /etc/fstab; then
-    echo "Adding $DRIVE to /etc/fstab..."
-    echo "UUID=$UUID $MOUNT_POINT ext4 defaults 0 2" | sudo tee -a /etc/fstab
+# Update /etc/fstab
+echo "Updating /etc/fstab..."
+FSTAB_ENTRY="/dev/$DRIVE   $MOUNT_POINT   $FILESYSTEM   defaults   0   2"
+if ! grep -qs "$FSTAB_ENTRY" /etc/fstab; then
+  echo "$FSTAB_ENTRY" | sudo tee -a /etc/fstab
+  echo "Entry added to /etc/fstab:"
+  echo "$FSTAB_ENTRY"
+else
+  echo "Entry already exists in /etc/fstab."
 fi
 
-echo "Drive $DRIVE successfully mounted to $MOUNT_POINT and added to /etc/fstab."
+# Verify mount
+echo "Verifying mount..."
+if mount | grep -qs "$MOUNT_POINT"; then
+  echo "Drive /dev/$DRIVE successfully mounted at $MOUNT_POINT and added to /etc/fstab."
+else
+  echo "Error: Drive /dev/$DRIVE was not mounted."
+fi
