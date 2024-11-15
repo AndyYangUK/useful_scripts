@@ -3,24 +3,34 @@
 # To download this script from GitHub and run it:
 # wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/ubuntu-server-setup.sh -O ubuntu-server-setup.sh && sudo bash ubuntu-server-setup.sh
 
+# Load environment variables from .env file if it exists
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+fi
+
 # Variables
-NEW_USER="andy"
-GITHUB_USER="andyyanguk"  # GitHub username to fetch SSH keys
+if [ -z "$NEW_USER" ]; then
+  read -p "Enter the new username to be created: " NEW_USER
+  echo "NEW_USER=$NEW_USER" >> .env
+fi
+
+if [ -z "$USER_PASSWORD" ]; then
+  read -sp "Enter a password for the new user $NEW_USER: " USER_PASSWORD
+  echo
+  echo "USER_PASSWORD=$USER_PASSWORD" >> .env
+fi
+
+if [ -z "$GITHUB_USER" ]; then
+  read -p "Enter your GitHub username (for SSH keys): " GITHUB_USER
+  echo "GITHUB_USER=$GITHUB_USER" >> .env
+fi
 
 # Prompt for any required input at the start
-read -p "Enter the Zerotier network ID: " ZEROTIER_NETWORK_ID
+if [ -z "$ZEROTIER_NETWORK_ID" ]; then
+  read -p "Enter the Zerotier network ID: " ZEROTIER_NETWORK_ID
+  echo "ZEROTIER_NETWORK_ID=$ZEROTIER_NETWORK_ID" >> .env
+fi
 echo
-read -sp "Enter a password for the new user $NEW_USER: " USER_PASSWORD
-echo
-read -sp "Enter your Netdata claim token: " NETDATA_CLAIM_TOKEN
-echo
-read -p "Enter your Netdata claim room ID: " NETDATA_CLAIM_ROOMS
-
-# Update system
-echo "Updating system..."
-apt update && apt upgrade -y
-apt autoremove -y
-echo -e "\n********** System Update Complete **********\n"
 
 # Add new user and grant sudo privileges (only if not exists)
 if id -u "$NEW_USER" >/dev/null 2>&1; then
@@ -34,22 +44,20 @@ else
 fi
 echo -e "\n********** User Setup Complete **********\n"
 
+# Update system
+echo "Updating system..."
+apt update && apt upgrade -y
+apt autoremove -y
+echo -e "\n********** System Update Complete **********\n"
+
 # Install Zerotier and join network
 if command -v zerotier-cli &> /dev/null && zerotier-cli info >/dev/null 2>&1; then
     echo "Zerotier is already installed and active."
 else
     echo "Installing Zerotier..."
-    curl -s https://install.zerotier.com | sudo bash || { echo "Failed to install Zerotier."; exit 1; }
+    curl -s https://install.zerotier.com | bash || { echo "Failed to install Zerotier."; exit 1; }
     echo "Joining Zerotier network $ZEROTIER_NETWORK_ID..."
     zerotier-cli join $ZEROTIER_NETWORK_ID || { echo "Failed to join Zerotier network."; exit 1; }
-    while true; do
-        read -p "Have you accepted this server on the Zerotier portal? (y/n): " yn
-        case $yn in
-            [Yy]* ) break;;
-            [Nn]* ) echo "Please accept the server on the Zerotier portal to proceed.";;
-            * ) echo "Please answer yes or no.";;
-        esac
-    done
 fi
 echo -e "\n********** Zerotier Installation and Network Join Complete **********\n"
 
@@ -63,13 +71,13 @@ chown $NEW_USER:$NEW_USER "$SCRIPT_DIR"
 mkdir -p "$LOG_DIR"
 chown $NEW_USER:$NEW_USER "$LOG_DIR"
 SCRIPT_PATH="$SCRIPT_DIR/download-github-sshkeys.sh"
-wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/download-github-ssh.sh -O "$SCRIPT_PATH" || { echo "Failed to download GitHub SSH key script."; exit 1; }
+curl -s https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/download-github-ssh.sh -o "$SCRIPT_PATH" || { echo "Failed to download GitHub SSH key script."; exit 1; }
 chmod +x "$SCRIPT_PATH"
 echo -e "\n********** GitHub SSH Key Script Downloaded and Configured **********\n"
 
-# Update crontab to include SSH key download tasks 
+# Update crontab to include SSH key download tasks
 (crontab -l 2>/dev/null | grep -q "download-github-sshkeys.sh") || {
-    (crontab -l 2>/dev/null; echo "*/10 * * * * sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt"; echo "@reboot sleep 120 && sh $SCRIPT_PATH > $LOG_DIR/download-github-ssh.txt") | crontab -
+    (crontab -l 2>/dev/null; echo "*/10 * * * * bash $SCRIPT_PATH >> $LOG_DIR/download-github-ssh.txt 2>&1"; echo "@reboot sleep 120 && sh $SCRIPT_PATH >> $LOG_DIR/download-github-ssh.txt 2>&1") | crontab -
     echo "Crontab updated with GitHub SSH key download tasks."
 }
 
@@ -82,17 +90,9 @@ echo -e "\n********** GitHub SSH Key Script Run Complete **********\n"
 echo "Configuring SSH..."
 SSH_CONFIG="/etc/ssh/sshd_config"
 
-if grep -q "^PermitRootLogin no" "$SSH_CONFIG"; then
-    echo "Root login already disabled."
-else
-    sed -i "s/^PermitRootLogin yes/PermitRootLogin no/" $SSH_CONFIG
-fi
+sed -i "s/^#*PermitRootLogin .*/PermitRootLogin no/" "$SSH_CONFIG"
 
-if grep -q "^PasswordAuthentication no" "$SSH_CONFIG"; then
-    echo "Password authentication already disabled."
-else
-    sed -i "s/^#PasswordAuthentication yes/PasswordAuthentication no/" $SSH_CONFIG
-fi
+sed -i "s/^#*PasswordAuthentication .*/PasswordAuthentication no/" "$SSH_CONFIG"
 
 # Install and configure UFW firewall
 echo "Installing UFW if not available..."
@@ -141,8 +141,8 @@ echo -e "\n********** Root Account Lock Complete **********\n"
 
 # Restart SSH only if the configuration was modified
 if systemctl is-active --quiet ssh && ! systemctl is-failed ssh; then
-    echo "Restarting SSH..."
-    systemctl restart ssh || { echo "Failed to restart SSH."; exit 1; }
+    echo "Testing SSH configuration..."
+    sshd -t && systemctl restart ssh || { echo "Failed to restart SSH."; exit 1; }
 else
     echo "SSH service not running or already failed. Please check SSH configuration."
 fi
@@ -159,8 +159,8 @@ id $NEW_USER && echo "User $NEW_USER exists with sudo privileges."
 [[ -f /home/$NEW_USER/.ssh/authorized_keys ]] && echo "SSH keys configured for $NEW_USER."
 
 # Verify SSH keys match GitHub keys
-GITHUB_KEYS=$(wget -qO - https://github.com/$GITHUB_USER.keys)
-SERVER_KEYS=$(cat /home/$NEW_USER/.ssh/authorized_keys)
+GITHUB_KEYS=$(curl -s https://github.com/$GITHUB_USER.keys | sort)
+SERVER_KEYS=$(sort /home/$NEW_USER/.ssh/authorized_keys)
 if [[ "$GITHUB_KEYS" == "$SERVER_KEYS" ]]; then
     echo "SSH keys on server match GitHub keys for $NEW_USER."
 else
@@ -176,25 +176,12 @@ if grep -q "PermitRootLogin no" "$SSH_CONFIG" && grep -q "PasswordAuthentication
 fi
 
 # Automatic updates check
+
 dpkg -l | grep -qw unattended-upgrades && echo "Automatic updates are enabled."
 
-# Fail2ban check
-systemctl is-active --quiet fail2ban && echo "Fail2ban is active."
-
-# Root lock check
-passwd -S root | grep -q "L" && echo "Root account is locked."
-
-# Netdata verification check
-if systemctl is-active --quiet netdata; then
-    echo "Netdata is installed and running."
+# Automatic reboot for security patches check
+if grep -q 'Unattended-Upgrade::Automatic-Reboot "true";' /etc/apt/apt.conf.d/50unattended-upgrades; then
+    echo "Automatic reboot for security patches is enabled."
 else
-    echo "WARNING: Netdata is not running. Please check the installation."
+    echo "WARNING: Automatic reboot for security patches is not enabled."
 fi
-
-# GitHub SSH key script check
-[[ -f "$SCRIPT_PATH" ]] && [[ -x "$SCRIPT_PATH" ]] && echo "GitHub SSH key script is present at $SCRIPT_PATH and is executable."
-
-# Crontab verification check
-crontab -l | grep -q "download-github-sshkeys.sh" && echo "Crontab entries for GitHub SSH key download tasks are configured."
-
-echo -e "\n********** All Verification Checks Complete **********\n"
