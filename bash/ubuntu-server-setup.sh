@@ -1,7 +1,11 @@
 #!/bin/bash
 
 # To download this script from GitHub and run it:
-# wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/ubuntu-server-setup.sh -O ubuntu-server-setup.sh && sudo bash ubuntu-server-setup.sh
+# wget -q https://raw.githubusercontent.com/AndyYangUK/useful_scripts/refs/heads/main/bash/ubuntu-server-setup.sh -O ubuntu-server-setup.sh && bash ubuntu-server-setup.sh
+
+# Ensure required tools are installed
+apt update
+apt install -y curl sudo
 
 # Load environment variables from .env file if it exists
 if [ -f .env ]; then
@@ -83,7 +87,7 @@ echo -e "\n********** GitHub SSH Key Script Downloaded and Configured **********
 
 # Run the GitHub SSH key script
 echo "Running GitHub SSH key script to ensure latest SSH keys are active..."
-sudo -u $NEW_USER sh $SCRIPT_PATH || { echo "Failed to run GitHub SSH key script."; exit 1; }
+su -c "sh $SCRIPT_PATH" -s /bin/bash $NEW_USER || { echo "Failed to run GitHub SSH key script."; exit 1; }
 echo -e "\n********** GitHub SSH Key Script Run Complete **********\n"
 
 # Set up SSH security (check if already set)
@@ -117,7 +121,7 @@ fi
 # Enable automated reboot for security patches
 echo "Enabling automated reboot for security patches..."
 apt install -y cron || { echo "Failed to install cron."; exit 1; }
-echo -e "APT::Periodic::Unattended-Upgrade \"1\";\nUnattended-Upgrade::Automatic-Reboot \"true\";\nUnattended-Upgrade::Automatic-Reboot-Time \"02:00\";" | sudo tee /etc/apt/apt.conf.d/50unattended-upgrades >/dev/null
+echo -e "APT::Periodic::Unattended-Upgrade \"1\";\nUnattended-Upgrade::Automatic-Reboot \"true\";\nUnattended-Upgrade::Automatic-Reboot-Time \"02:00\";" | tee /etc/apt/apt.conf.d/50unattended-upgrades >/dev/null
 echo -e "\n********** Automatic Updates Setup Complete **********\n"
 
 # Install and configure Fail2ban if not already installed
