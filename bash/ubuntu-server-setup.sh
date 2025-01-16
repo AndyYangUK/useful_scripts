@@ -5,7 +5,7 @@
 
 # Ensure required tools are installed
 apt update
-apt install -y curl sudo
+apt install -y curl sudo nano ufw
 
 # Load environment variables from .env file if it exists
 if [ -f .env ]; then
@@ -98,9 +98,7 @@ sed -i "s/^#*PermitRootLogin .*/PermitRootLogin no/" "$SSH_CONFIG"
 
 sed -i "s/^#*PasswordAuthentication .*/PasswordAuthentication no/" "$SSH_CONFIG"
 
-# Install and configure UFW firewall
-echo "Installing UFW if not available..."
-apt install -y ufw || { echo "Failed to install UFW."; exit 1; }
+# Configure UFW firewall
 
 echo "Configuring UFW firewall..."
 sudo ufw allow OpenSSH >/dev/null 2>&1
