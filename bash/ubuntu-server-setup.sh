@@ -61,7 +61,7 @@ else
     echo "Installing Zerotier..."
     curl -s https://install.zerotier.com | bash || { echo "Failed to install Zerotier."; exit 1; }
     echo "Joining Zerotier network $ZEROTIER_NETWORK_ID..."
-    zerotier-cli join $ZEROTIER_NETWORK_ID || { echo "Failed to join Zerotier network."; exit 1; }
+    sudo zerotier-cli join $ZEROTIER_NETWORK_ID || { echo "Failed to join Zerotier network."; exit 1; }
 fi
 echo -e "\n********** Zerotier Installation and Network Join Complete **********\n"
 
@@ -103,9 +103,9 @@ echo "Installing UFW if not available..."
 apt install -y ufw || { echo "Failed to install UFW."; exit 1; }
 
 echo "Configuring UFW firewall..."
-ufw allow OpenSSH >/dev/null 2>&1
-ufw --force enable
-ufw status
+sudo ufw allow OpenSSH >/dev/null 2>&1
+sudo ufw --force enable
+sudo ufw status
 echo -e "\n********** Firewall Setup Complete **********\n"
 
 # Enable automatic updates if not already enabled
@@ -146,7 +146,7 @@ echo -e "\n********** Root Account Lock Complete **********\n"
 # Restart SSH only if the configuration was modified
 if systemctl is-active --quiet ssh && ! systemctl is-failed ssh; then
     echo "Testing SSH configuration..."
-    sshd -t && systemctl restart ssh || { echo "Failed to restart SSH."; exit 1; }
+    sudo sshd -t && systemctl restart ssh || { echo "Failed to restart SSH."; exit 1; }
 else
     echo "SSH service not running or already failed. Please check SSH configuration."
 fi
@@ -172,7 +172,7 @@ else
 fi
 
 # UFW check
-ufw status | grep -qw "Status: active" && echo "UFW is active and configured."
+sudo ufw status | grep -qw "Status: active" && echo "UFW is active and configured."
 
 # SSH configuration check
 if grep -q "PermitRootLogin no" "$SSH_CONFIG" && grep -q "PasswordAuthentication no" "$SSH_CONFIG"; then
@@ -189,3 +189,5 @@ if grep -q 'Unattended-Upgrade::Automatic-Reboot "true";' /etc/apt/apt.conf.d/50
 else
     echo "WARNING: Automatic reboot for security patches is not enabled."
 fi
+
+echo -e "\n********** Script Finished **********\n"
